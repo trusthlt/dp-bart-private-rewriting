@@ -1,7 +1,7 @@
 python ../main.py \
        --mode pretrain \
        --model adept \
-       --dataset wikipedia \
+       --dataset openwebtext \
        --name pretrain_adept_openwebtext512 \
        --epochs 500 \
        --max_seq_len 20 \
