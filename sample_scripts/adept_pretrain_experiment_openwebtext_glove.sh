@@ -2,12 +2,12 @@ python ../main.py \
        --mode pretrain \
        --model adept \
        --dataset wikipedia \
-       --name pretrain_adept_wikipedia \
-       --epochs 100 \
+       --name pretrain_adept_openwebtext512 \
+       --epochs 500 \
        --max_seq_len 20 \
        --batch_size 64 \
-       --hidden_size 128 \
-       --learning_rate 3e-3 \
+       --hidden_size 512 \
+       --learning_rate 0.001 \
        --clipping_constant 5 \
        --weight_decay 0 \
        --train_teacher_forcing_ratio 0.0 \
@@ -20,4 +20,4 @@ python ../main.py \
        --local False \
        --output_dir "<path>/<to>/<output_dir>" \
        --asset_dir "<path>/<to>/<asset_dir>" \
-       --embed_dir_unprocessed "<path>/<to>/<glove_embeddings>"
+       --embed_dir_unprocessed "<path/to/embeddings/glove.6B.300d.txt>"

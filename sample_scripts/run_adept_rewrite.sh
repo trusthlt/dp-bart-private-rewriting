@@ -1,0 +1,21 @@
+python main.py \
+       --mode rewrite \
+       --model adept \
+       --dataset atis \
+       --name rewrite_adept_epsilon250 \
+       --private True \
+       --epsilon 250 \
+       --delta 1e-05 \
+       --max_seq_len 20 \
+       --dp_mechanism gaussian \
+       --batch_size 64 \
+       --hidden_size 512 \
+       --clipping_constant 5 \
+       --train_teacher_forcing_ratio 0.0 \
+       --embed_type glove \
+       --embed_size 300 \
+       --seed 42 \
+       --output_dir "<path/to/output_dir>" \
+       --asset_dir "<path/to/dataset_dir>" \
+       --embed_dir_unprocessed "<path/to/embeddings/glove.6B.300d.txt" \
+       --last_checkpoint_path "<path/to/model.pt>"

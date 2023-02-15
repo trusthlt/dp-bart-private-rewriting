@@ -1,0 +1,18 @@
+python main.py \
+       --mode rewrite \
+       --model dp_bart \
+       --dataset atis \
+       --name rewrite_dp-bart-clv_epsilon250 \
+       --private True \
+       --epsilon 250 \
+       --delta 1e-05 \
+       --max_seq_len 20 \
+       --dp_mechanism gaussian \
+       --dp_module clip_value \
+       --batch_size 64 \
+       --clipping_constant 5 \
+       --transformer_type facebook/bart-base \
+       --seed 42 \
+       --output_dir "<path/to/output_dir>" \
+       --asset_dir "<path/to/dataset_dir>" \
+       --last_checkpoint_path "<path/to/model.pt>"
