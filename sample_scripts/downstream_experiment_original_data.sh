@@ -1,0 +1,19 @@
+python ../main.py \
+       --mode downstream \
+       --model bert_downstream \
+       --dataset atis \
+       --name downstream_bert_sample_experiment \
+       --epochs 20 \
+       --max_seq_len 20 \
+       --batch_size 4 \
+       --transformer_type bert-base-uncased \
+       --learning_rate 0.0001 \
+       --weight_decay 0.01 \
+       --train_teacher_forcing_ratio 0.0 \
+       --optim_type adam \
+       --seed 42 \
+       --early_stopping True \
+       --patience 5 \
+       --local False \
+       --output_dir "<path>/<to>/<output_dir>" \
+       --asset_dir "<path>/<to>/<asset_dir>" 
