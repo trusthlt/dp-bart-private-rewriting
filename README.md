@@ -2,7 +2,7 @@
 
 ## Description
 
-Code accompanying "DP-BART for Privatized Text Rewriting under Local Differential Privacy" paper.
+Code accompanying "DP-BART for Privatized Text Rewriting under Local Differential Privacy" paper ( https://arxiv.org/abs/2302.07636 ).
 
 ## Installation
 
