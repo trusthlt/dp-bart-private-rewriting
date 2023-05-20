@@ -116,7 +116,7 @@ class Experiment(ABC):
         self.dp_module = ss.args.dp_module
         self.dp_mechanism = ss.args.dp_mechanism
         self.discretize = ss.args.discretize
-        if self.dp_mechanism == 'gaussian' and self.norm_ord == 1:
+        if (self.dp_mechanism == 'gaussian' or self.dp_mechanism == 'analytic_gaussian') and self.norm_ord == 1:
             print(f"\n+++ WARNING: Using {self.dp_mechanism} noise with norm order {self.norm_ord}. +++\n")
 
         # Additional settings

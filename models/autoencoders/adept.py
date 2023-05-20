@@ -12,6 +12,7 @@ from transformers import BertModel
 import pdb
 from tqdm import tqdm
 from abc import ABC, abstractmethod
+from utils import calibrateAnalyticGaussianMechanism_precision
 
 
 class ADePTModelConfig(GeneralModelConfig):
@@ -29,6 +30,12 @@ class ADePT(Autoencoder_RNN):
         self.config = config
         self.encoder = self.get_encoder()
         self.decoder = self.get_decoder()
+
+        self.analytic_sensitivity = 2 * config.clipping_constant
+        self.analytic_noise_scale =\
+                calibrateAnalyticGaussianMechanism_precision(
+                        config.epsilon, config.delta,
+                        self.analytic_sensitivity)
 
     def get_encoder(self):
         encoder = Encoder(
@@ -128,6 +135,9 @@ class ADePT(Autoencoder_RNN):
         elif self.config.norm_ord == 2 and\
                 self.config.dp_mechanism == 'gaussian':
             sensitivity = torch.tensor(2 * self.config.clipping_constant)
+        elif self.config.norm_ord == 2 and\
+                self.config.dp_mechanism == 'analytic_gaussian':
+            sensitivity = torch.tensor(2 * self.config.clipping_constant)
         else:
             raise Exception("Sensitivity calculation for clipping by norm only implemented for Laplace mechanism with L1/L2 norm clipping, or Gaussian mechanism with L2 norm clipping.")
         return sensitivity
@@ -143,6 +153,12 @@ class ADePT(Autoencoder_RNN):
         elif self.config.dp_mechanism == 'gaussian':
             scale = torch.sqrt(
                 (sensitivity**2 / self.config.epsilon**2) * 2 * torch.log(torch.tensor(1.25 / self.config.delta)))
+            gauss = torch.distributions.normal.Normal(0, scale)
+            noise = gauss.sample(
+                sample_shape=torch.Size((clipped_tensor.shape[1],
+                                         clipped_tensor.shape[2])))
+        elif self.config.dp_mechanism == 'analytic_gaussian':
+            scale = self.analytic_noise_scale
             gauss = torch.distributions.normal.Normal(0, scale)
             noise = gauss.sample(
                 sample_shape=torch.Size((clipped_tensor.shape[1],

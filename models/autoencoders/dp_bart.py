@@ -11,6 +11,7 @@ from transformers import BartForConditionalGeneration, BartConfig, BartModel
 from transformers.models.bart.modeling_bart import BartPretrainedModel
 from transformers.modeling_outputs import Seq2SeqLMOutput
 from utils import load_neurons_for_pruning, determine_neurons_to_prune, add_neurons_to_prune, non_intersection
+from utils import calibrateAnalyticGaussianMechanism_precision
 import pdb
 
 
@@ -154,6 +155,10 @@ class DPBart_Private(BartPretrainedModel):
         self.discretize = discretize
         self.config = config
 
+        self.sigma = 0.1
+        self.mean = 0.00
+        self.num_sigmas = 1
+
         self.model = BartModel(config)
         self.register_buffer(
                 "final_logits_bias",
@@ -166,6 +171,14 @@ class DPBart_Private(BartPretrainedModel):
         self.k_prune_neurons, self.v_prune_neurons = None, None
         if pruning:
             self._prepare_pruning(device)
+
+            self.k = max_seq_len * (self.hidden_dim - self.k_prune_neurons.shape[0])
+            self.analytic_sensitivity = 2 * self.sigma * self.num_sigmas * np.sqrt(self.k)
+            self.analytic_scale = calibrateAnalyticGaussianMechanism_precision(epsilon, delta, self.analytic_sensitivity)
+        else:
+            self.k = max_seq_len * self.hidden_dim
+            self.analytic_sensitivity = 2 * self.sigma * self.num_sigmas * np.sqrt(self.k)
+            self.analytic_scale = calibrateAnalyticGaussianMechanism_precision(epsilon, delta, self.analytic_sensitivity)
 
     def add_neurons_to_prune(self, counter):
         out_path = self.pruning_index_path[:-3] + f'_{counter}.pt'
@@ -229,9 +242,9 @@ class DPBart_Private(BartPretrainedModel):
             else:
                 noised_outputs = self.add_noise(clipped_tensor)
         elif self.dp_module == 'clip_value':
-            sigma = 0.1
-            mean = 0.00
-            num_sigmas = 1
+            sigma = self.sigma
+            mean = self.mean
+            num_sigmas = self.num_sigmas
             left_clip = mean - (sigma * num_sigmas)
             right_clip = mean + (sigma * num_sigmas)
             clipped_tensor = torch.clamp(hidden, left_clip, right_clip)
@@ -248,14 +261,45 @@ class DPBart_Private(BartPretrainedModel):
                     scale = np.sqrt((sensitivity**2 / self.epsilon**2) * 2 * np.log(1.25 / self.delta))
                     gauss = torch.distributions.normal.Normal(0, scale)
                     noise = gauss.sample(sample_shape=torch.Size((clipped_tensor.shape[0], clipped_tensor.shape[1])))
+                elif self.dp_mechanism == 'analytic_gaussian':
+                    scale = self.analytic_scale
+                    gauss = torch.distributions.normal.Normal(0, scale)
+                    noise = gauss.sample(sample_shape=torch.Size((clipped_tensor.shape[0], clipped_tensor.shape[1])))
                 else:
                     raise Exception(f"No DP mechanism available called '{self.dp_mechanism}'.")
                 noise = noise.to(self.device)
 
                 noised_outputs = clipped_tensor + noise
+#                js_denoised = self.denoisify(noised_outputs, scale, estimator='james-stein')
+#                th_denoised = self.denoisify(noised_outputs, scale, estimator='soft-thresholding')
+#                bayes_denoised = self.denoisify(noised_outputs, scale, estimator='bayes')
+#                noised_outputs = js_denoised
+#                temp_mse = nn.MSELoss()
+#                mse_nodenoise = temp_mse(noised_outputs, clipped_tensor).item()
+#                mse_js = temp_mse(js_denoised, clipped_tensor).item()
+#                mse_th = temp_mse(th_denoised, clipped_tensor).item()
+#                with open('/Users/timourigamberdiev/Documents/code/dp_bart_results/runs/estimator_analysis.csv', 'a') as out_f:
+#                    out_f.write(f'{self.epsilon},{mse_nodenoise},{mse_js},{mse_th}\n')
         else:
             raise Exception(f"No privacy module available called '{self.dp_module}'.")
         return noised_outputs
+
+    def denoisify(self, noisy_tensor, scale, estimator='james-stein'):
+        if estimator == 'james-stein':
+            dim = noisy_tensor.shape[1]
+            norm = torch.linalg.norm(noisy_tensor, axis=1, ord=1)  # norm.shape == torch.Size([batch_size])
+            left = (1 - (((dim - 2) * scale**2) / norm**2))
+            denoisified_tensor = torch.matmul(torch.diag(left), noisy_tensor)
+        elif estimator == 'soft-thresholding':
+            dim = noisy_tensor.shape[1]
+            lamb = scale * np.sqrt(2 * np.log(dim))
+            denoisified_tensor = torch.sign(noisy_tensor) * torch.max(torch.zeros(noisy_tensor.shape), torch.abs(noisy_tensor) - lamb)
+        elif estimator == 'bayes':
+            w = 0.2
+            denoisified_tensor = (w**2 / (w**2 + scale**2)) * noisy_tensor
+        else:
+            raise NotImplementedError
+        return denoisified_tensor
 
     def clip(self, hidden):
         norm = torch.linalg.norm(hidden, axis=1, ord=self.norm_ord)
@@ -272,6 +316,8 @@ class DPBart_Private(BartPretrainedModel):
                 torch.tensor(clipped_tensor.shape[2]))
         elif self.norm_ord == 2 and self.dp_mechanism == 'gaussian':
             sensitivity = torch.tensor(2 * self.clipping_constant)
+        elif self.norm_ord == 2 and self.dp_mechanism == 'analytic_gaussian':
+            sensitivity = torch.tensor(2 * self.clipping_constant)
         else:
             raise Exception("Sensitivity calculation for clipping by norm only implemented for Laplace mechanism with L1/L2 norm clipping, or Gaussian mechanism with L2 norm clipping.")
         return sensitivity
@@ -283,6 +329,10 @@ class DPBart_Private(BartPretrainedModel):
             noise = laplace.sample(sample_shape=torch.Size((clipped_tensor.shape[0], clipped_tensor.shape[1])))
         elif self.dp_mechanism == 'gaussian':
             scale = torch.sqrt((sensitivity**2 / self.epsilon**2) * 2 * torch.log(torch.tensor(1.25 / self.delta)))
+            gauss = torch.distributions.normal.Normal(0, scale)
+            noise = gauss.sample(sample_shape=torch.Size((clipped_tensor.shape[0], clipped_tensor.shape[1])))
+        elif self.dp_mechanism == 'analytic_gaussian':
+            scale = self.analytic_scale
             gauss = torch.distributions.normal.Normal(0, scale)
             noise = gauss.sample(sample_shape=torch.Size((clipped_tensor.shape[0], clipped_tensor.shape[1])))
         noise = noise.to(self.device)
