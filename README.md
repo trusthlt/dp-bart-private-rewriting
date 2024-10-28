@@ -37,3 +37,6 @@ Additional hyperparameters such as `--batch_size`, `--learning_rate`, and `--del
 
 This repository is an extension to the framework provided at https://github.com/trusthlt/dp-rewrite. More details on running other types of configurations can be found there.
 
+### Model Checkpoints
+
+Checkpoints for the DP-BART-PR and DP-BART-PR+ set of models that were used in the paper are available at: https://huggingface.co/TrustHLT
